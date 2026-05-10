@@ -1,0 +1,14 @@
+# Generated image archives are large and are intentionally kept local.
+/originals/
+/photopainter_800x480_bmp/
+/preview_800x480_jpg/
+
+# Local Python environments and caches.
+/.venv/
+/.venv-*/
+__pycache__/
+*.py[cod]
+
+# Runtime state/logs from the Raspberry Pi.
+.photopainter-state.json
+photopainter-rotate.log
