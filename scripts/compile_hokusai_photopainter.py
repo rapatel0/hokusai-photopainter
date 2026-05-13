@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import argparse
 import csv
 import hashlib
 import json
@@ -42,13 +43,14 @@ PRINT_HINTS = (
     "engraving",
 )
 
-E6_PALETTE = [
-    (255, 255, 255),  # white
-    (0, 0, 0),  # black
-    (0, 255, 0),  # green
-    (0, 0, 255),  # blue
-    (255, 0, 0),  # red
-    (255, 255, 0),  # yellow
+WAVESHARE_7IN3E_PALETTE = [
+    (0, 0, 0),  # black, panel index 0
+    (255, 255, 255),  # white, panel index 1
+    (255, 255, 0),  # yellow, panel index 2
+    (255, 0, 0),  # red, panel index 3
+    (0, 0, 0),  # unused by the 7.3in E driver
+    (0, 0, 255),  # blue, panel index 5
+    (0, 255, 0),  # green, panel index 6
 ]
 
 
@@ -291,9 +293,9 @@ def download_file(url: str, output_path: Path) -> None:
 def build_palette_image() -> Image.Image:
     palette = Image.new("P", (1, 1))
     values: list[int] = []
-    for color in E6_PALETTE:
+    for color in WAVESHARE_7IN3E_PALETTE:
         values.extend(color)
-    values.extend([255, 255, 255] * (256 - len(E6_PALETTE)))
+    values.extend([0, 0, 0] * (256 - len(WAVESHARE_7IN3E_PALETTE)))
     palette.putpalette(values)
     return palette
 
@@ -310,18 +312,46 @@ def prepare_display_image(input_path: Path) -> Image.Image:
         return canvas
 
 
-def convert_for_photopainter(input_path: Path, bmp_path: Path, preview_path: Path) -> None:
-    if bmp_path.exists() and preview_path.exists():
+def clean_paper_background(image: Image.Image) -> Image.Image:
+    """Snap pale neutral scan paper to display white before EPD quantization."""
+    output = image.copy()
+    cleaned_pixels: list[tuple[int, int, int]] = []
+    for r, g, b in output.getdata():
+        if min(r, g, b) >= 165 and max(r, g, b) - min(r, g, b) <= 70:
+            cleaned_pixels.append((255, 255, 255))
+        else:
+            cleaned_pixels.append((r, g, b))
+    output.putdata(cleaned_pixels)
+    return output
+
+
+def quantize_for_preview(image: Image.Image) -> Image.Image:
+    palette = build_palette_image()
+    return image.quantize(palette=palette, dither=Image.Dither.FLOYDSTEINBERG).convert(
+        "RGB"
+    )
+
+
+def convert_for_photopainter(
+    input_path: Path,
+    bmp_path: Path,
+    preview_path: Path,
+    *,
+    force: bool,
+    prequantize: bool,
+    paper_cleanup: bool,
+) -> None:
+    if not force and bmp_path.exists() and preview_path.exists():
         return
     bmp_path.parent.mkdir(parents=True, exist_ok=True)
     preview_path.parent.mkdir(parents=True, exist_ok=True)
     display = prepare_display_image(input_path)
-    preview = display.copy()
-    palette = build_palette_image()
-    dithered = display.quantize(palette=palette, dither=Image.Dither.FLOYDSTEINBERG).convert(
-        "RGB"
-    )
-    dithered.save(bmp_path, format="BMP")
+    if paper_cleanup:
+        display = clean_paper_background(display)
+
+    preview = quantize_for_preview(display)
+    output = quantize_for_preview(display) if prequantize else display
+    output.save(bmp_path, format="BMP")
     preview.save(preview_path, format="JPEG", quality=88, optimize=True)
 
 
@@ -348,7 +378,33 @@ def write_manifests(records: list[dict[str, Any]]) -> None:
             f.write(json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n")
 
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Regenerate display BMPs and previews even if they already exist.",
+    )
+    parser.add_argument(
+        "--prequantize",
+        action="store_true",
+        help=(
+            "Save six-color dithered BMPs. By default BMPs remain RGB and the "
+            "Waveshare driver performs the final panel quantization."
+        ),
+    )
+    parser.add_argument(
+        "--no-paper-cleanup",
+        dest="paper_cleanup",
+        action="store_false",
+        default=True,
+        help="Disable cleanup that snaps pale neutral scan paper to display white.",
+    )
+    return parser.parse_args()
+
+
 def main() -> None:
+    args = parse_args()
     ROOT.mkdir(exist_ok=True)
     rows = unique_rows([*fetch_cleveland(), *fetch_artic(), *fetch_met()])
     print(f"Found {len(rows)} official public-domain Hokusai print image records", flush=True)
@@ -362,7 +418,14 @@ def main() -> None:
         preview_path = PREVIEW_DIR / f"{stem}.jpg"
         try:
             download_file(row.download_url, original_path)
-            convert_for_photopainter(original_path, bmp_path, preview_path)
+            convert_for_photopainter(
+                original_path,
+                bmp_path,
+                preview_path,
+                force=args.force,
+                prequantize=args.prequantize,
+                paper_cleanup=args.paper_cleanup,
+            )
             record = {
                 **asdict(row),
                 "original_path": str(original_path),

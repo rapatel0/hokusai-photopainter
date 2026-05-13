@@ -21,6 +21,15 @@ photopainter_800x480_bmp/
 preview_800x480_jpg/
 ```
 
+The compiler writes display-sized RGB BMPs by default. The Waveshare Python driver
+does the final 6-color panel quantization in `epd7in3e.getbuffer()`, matching the
+vendor display path. To regenerate existing BMPs after changing conversion
+settings:
+
+```bash
+python scripts/compile_hokusai_photopainter.py --force
+```
+
 Metadata manifests are kept in `metadata/`.
 
 ## Raspberry Pi
@@ -42,6 +51,10 @@ Advance through the Hokusai collection one image at a time:
 ```bash
 ~/photopainter-venv/bin/python ~/photopainter-show-hokusai.py
 ```
+
+The rotation script clears the panel before each image by default to reduce
+carry-over artifacts between daily prints. Use `--no-clear-first` only when you
+want a faster refresh and can tolerate possible ghosting.
 
 The stateful picker stores its next index in:
 

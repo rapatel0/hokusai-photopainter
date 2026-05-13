@@ -71,6 +71,19 @@ def main() -> None:
     parser.add_argument("--state-file", type=Path, default=DEFAULT_STATE_FILE)
     parser.add_argument("--reset-state", action="store_true")
     parser.add_argument("--rotate", type=int, choices=(0, 90, 180, 270), default=180)
+    parser.add_argument(
+        "--clear-first",
+        dest="clear_first",
+        action="store_true",
+        default=True,
+        help="Clear the panel before drawing the next image.",
+    )
+    parser.add_argument(
+        "--no-clear-first",
+        dest="clear_first",
+        action="store_false",
+        help="Skip the pre-display clear refresh.",
+    )
     args = parser.parse_args()
 
     image_path, index, total = choose_image(
@@ -81,6 +94,8 @@ def main() -> None:
     epd = epd7in3e.EPD()
     image = fit_image(image_path, epd.width, epd.height, args.rotate)
     epd.init()
+    if args.clear_first:
+        epd.Clear()
     epd.display(epd.getbuffer(image))
     epd.sleep()
     save_next_index(args.state_file, index + 1, image_path, total)
