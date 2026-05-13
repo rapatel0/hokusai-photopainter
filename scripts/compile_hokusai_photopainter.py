@@ -13,10 +13,10 @@ from typing import Any, Iterable
 from urllib.parse import urlparse
 
 import requests
-from PIL import Image, ImageOps
+from PIL import Image, ImageEnhance, ImageOps
 
 
-ROOT = Path("hokusai_photopainter")
+ROOT = Path(__file__).resolve().parents[1]
 ORIGINALS_DIR = ROOT / "originals"
 DISPLAY_DIR = ROOT / "photopainter_800x480_bmp"
 PREVIEW_DIR = ROOT / "preview_800x480_jpg"
@@ -300,24 +300,104 @@ def build_palette_image() -> Image.Image:
     return palette
 
 
-def prepare_display_image(input_path: Path) -> Image.Image:
+def prepare_display_image(input_path: Path, conversion: str) -> Image.Image:
     with Image.open(input_path) as img:
         img = ImageOps.exif_transpose(img)
         img = img.convert("RGB")
-        img.thumbnail((800, 480), Image.Resampling.LANCZOS)
-        canvas = Image.new("RGB", (800, 480), (255, 255, 255))
-        x = (800 - img.width) // 2
-        y = (480 - img.height) // 2
-        canvas.paste(img, (x, y))
-        return canvas
+        if conversion == "waveshare":
+            return prepare_waveshare_display_image(img)
+        if conversion == "adaptive":
+            img = enhance_for_epaper(img)
+
+        return fit_contain(img, 800, 480)
+
+
+def fit_contain(image: Image.Image, width: int, height: int) -> Image.Image:
+    image = image.copy()
+    image.thumbnail((width, height), Image.Resampling.LANCZOS)
+    canvas = Image.new("RGB", (width, height), (255, 255, 255))
+    x = (width - image.width) // 2
+    y = (height - image.height) // 2
+    canvas.paste(image, (x, y))
+    return canvas
+
+
+def prepare_waveshare_display_image(image: Image.Image) -> Image.Image:
+    """Match Waveshare's ConverTo6c_bmp-7.3 converter for landscape frames."""
+    width, height = image.size
+    target_width, target_height = 800, 480
+    scale_ratio = max(target_width / width, target_height / height)
+    resized_width = int(width * scale_ratio)
+    resized_height = int(height * scale_ratio)
+    resized = image.resize((resized_width, resized_height))
+    canvas = Image.new("RGB", (target_width, target_height), (255, 255, 255))
+    left = (target_width - resized_width) // 2
+    top = (target_height - resized_height) // 2
+    canvas.paste(resized, (left, top))
+    return quantize_for_preview(canvas)
+
+
+def percentile_from_histogram(histogram: list[int], percentile: float) -> int:
+    total = sum(histogram)
+    if total <= 0:
+        return 0
+    threshold = total * percentile
+    seen = 0
+    for value, count in enumerate(histogram):
+        seen += count
+        if seen >= threshold:
+            return value
+    return 255
+
+
+def channel_percentile(image: Image.Image, band: int, percentile: float) -> int:
+    return percentile_from_histogram(image.getchannel(band).histogram(), percentile)
+
+
+def enhance_for_epaper(image: Image.Image) -> Image.Image:
+    """Normalize faded scans before the 7.3in EPD driver quantizes to panel colors."""
+    paper = [max(180, channel_percentile(image, band, 0.96)) for band in range(3)]
+    balanced_channels = []
+    for channel, white_point in zip(image.split(), paper, strict=True):
+        scale = 255 / white_point
+        balanced_channels.append(channel.point(lambda value: min(255, int(value * scale))))
+
+    balanced = Image.merge("RGB", balanced_channels)
+    balanced = ImageOps.autocontrast(balanced, cutoff=(1, 3))
+
+    gray = ImageOps.grayscale(balanced)
+    low = percentile_from_histogram(gray.histogram(), 0.04)
+    high = percentile_from_histogram(gray.histogram(), 0.94)
+    if high - low >= 12:
+        stretched_pixels: list[tuple[int, int, int]] = []
+        for r, g, b in balanced.getdata():
+            luminance = (299 * r + 587 * g + 114 * b) / 1000
+            target = max(0, min(255, (luminance - low) * 255 / (high - low)))
+            if luminance <= 0:
+                stretched_pixels.append((0, 0, 0))
+                continue
+            scale = target / luminance
+            stretched_pixels.append(
+                (
+                    max(0, min(255, int(r * scale))),
+                    max(0, min(255, int(g * scale))),
+                    max(0, min(255, int(b * scale))),
+                )
+            )
+        balanced.putdata(stretched_pixels)
+
+    balanced = ImageEnhance.Contrast(balanced).enhance(1.35)
+    balanced = ImageEnhance.Color(balanced).enhance(1.25)
+    balanced = ImageEnhance.Sharpness(balanced).enhance(1.25)
+    return balanced
 
 
 def clean_paper_background(image: Image.Image) -> Image.Image:
-    """Snap pale neutral scan paper to display white before EPD quantization."""
+    """Snap only near-white paper to display white after adaptive normalization."""
     output = image.copy()
     cleaned_pixels: list[tuple[int, int, int]] = []
     for r, g, b in output.getdata():
-        if min(r, g, b) >= 165 and max(r, g, b) - min(r, g, b) <= 70:
+        if min(r, g, b) >= 230 and max(r, g, b) - min(r, g, b) <= 35:
             cleaned_pixels.append((255, 255, 255))
         else:
             cleaned_pixels.append((r, g, b))
@@ -340,17 +420,18 @@ def convert_for_photopainter(
     force: bool,
     prequantize: bool,
     paper_cleanup: bool,
+    conversion: str,
 ) -> None:
     if not force and bmp_path.exists() and preview_path.exists():
         return
     bmp_path.parent.mkdir(parents=True, exist_ok=True)
     preview_path.parent.mkdir(parents=True, exist_ok=True)
-    display = prepare_display_image(input_path)
-    if paper_cleanup:
+    display = prepare_display_image(input_path, conversion)
+    if paper_cleanup and conversion != "waveshare":
         display = clean_paper_background(display)
 
-    preview = quantize_for_preview(display)
-    output = quantize_for_preview(display) if prequantize else display
+    preview = display.copy() if conversion == "waveshare" else quantize_for_preview(display)
+    output = quantize_for_preview(display) if prequantize and conversion != "waveshare" else display
     output.save(bmp_path, format="BMP")
     preview.save(preview_path, format="JPEG", quality=88, optimize=True)
 
@@ -381,6 +462,11 @@ def write_manifests(records: list[dict[str, Any]]) -> None:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument(
+        "--metadata-only",
+        action="store_true",
+        help="Refresh metadata manifests without downloading/converting images.",
+    )
+    parser.add_argument(
         "--force",
         action="store_true",
         help="Regenerate display BMPs and previews even if they already exist.",
@@ -390,7 +476,18 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help=(
             "Save six-color dithered BMPs. By default BMPs remain RGB and the "
-            "Waveshare driver performs the final panel quantization."
+            "Waveshare driver performs the final panel quantization. Ignored for "
+            "--conversion waveshare, which always emits six-color BMPs."
+        ),
+    )
+    parser.add_argument(
+        "--conversion",
+        choices=("waveshare", "adaptive", "plain"),
+        default="waveshare",
+        help=(
+            "Image conversion pipeline. waveshare matches the official six-color "
+            "PhotoPainter converter; adaptive preserves RGB for driver-side "
+            "quantization after dynamic range enhancement; plain only fits image."
         ),
     )
     parser.add_argument(
@@ -417,21 +514,23 @@ def main() -> None:
         bmp_path = DISPLAY_DIR / f"{stem}.bmp"
         preview_path = PREVIEW_DIR / f"{stem}.jpg"
         try:
-            download_file(row.download_url, original_path)
-            convert_for_photopainter(
-                original_path,
-                bmp_path,
-                preview_path,
-                force=args.force,
-                prequantize=args.prequantize,
-                paper_cleanup=args.paper_cleanup,
-            )
+            if not args.metadata_only:
+                download_file(row.download_url, original_path)
+                convert_for_photopainter(
+                    original_path,
+                    bmp_path,
+                    preview_path,
+                    force=args.force,
+                    prequantize=args.prequantize,
+                    paper_cleanup=args.paper_cleanup,
+                    conversion=args.conversion,
+                )
             record = {
                 **asdict(row),
-                "original_path": str(original_path),
-                "photopainter_bmp_path": str(bmp_path),
-                "preview_jpg_path": str(preview_path),
-                "original_sha256": file_sha256(original_path),
+                "original_path": str(original_path.relative_to(ROOT)),
+                "photopainter_bmp_path": str(bmp_path.relative_to(ROOT)),
+                "preview_jpg_path": str(preview_path.relative_to(ROOT)),
+                "original_sha256": file_sha256(original_path) if original_path.exists() else None,
             }
             records.append(record)
         except Exception as exc:

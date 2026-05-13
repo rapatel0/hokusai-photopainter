@@ -75,7 +75,7 @@ def main() -> None:
         "--clear-first",
         dest="clear_first",
         action="store_true",
-        default=True,
+        default=False,
         help="Clear the panel before drawing the next image.",
     )
     parser.add_argument(
