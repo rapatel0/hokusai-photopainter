@@ -41,6 +41,9 @@ Floyd-Steinberg dithering by default, while fitting the full artwork into the
 800x480 display without cropping. The `--conversion waveshare-crop` mode matches
 Waveshare's official scale-to-fill crop behavior exactly.
 
+The reverse-engineered converter notes are in
+[`docs/waveshare_dithering.md`](docs/waveshare_dithering.md).
+
 The upstream converter bundle can be downloaded for comparison or audit:
 
 ```bash
