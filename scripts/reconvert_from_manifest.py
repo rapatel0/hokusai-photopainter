@@ -26,7 +26,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--conversion",
-        choices=("waveshare", "adaptive", "plain"),
+        choices=("waveshare", "waveshare-crop", "adaptive", "plain"),
         default="waveshare",
     )
     parser.add_argument("--force", action="store_true", default=True)

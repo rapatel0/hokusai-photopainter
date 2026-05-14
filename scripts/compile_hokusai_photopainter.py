@@ -305,7 +305,9 @@ def prepare_display_image(input_path: Path, conversion: str) -> Image.Image:
         img = ImageOps.exif_transpose(img)
         img = img.convert("RGB")
         if conversion == "waveshare":
-            return prepare_waveshare_display_image(img)
+            return prepare_waveshare_display_image(img, crop=False)
+        if conversion == "waveshare-crop":
+            return prepare_waveshare_display_image(img, crop=True)
         if conversion == "adaptive":
             img = enhance_for_epaper(img)
 
@@ -322,18 +324,21 @@ def fit_contain(image: Image.Image, width: int, height: int) -> Image.Image:
     return canvas
 
 
-def prepare_waveshare_display_image(image: Image.Image) -> Image.Image:
-    """Match Waveshare's ConverTo6c_bmp-7.3 converter for landscape frames."""
+def prepare_waveshare_display_image(image: Image.Image, *, crop: bool) -> Image.Image:
+    """Apply Waveshare's 6-color conversion after fitting to a landscape frame."""
     width, height = image.size
     target_width, target_height = 800, 480
-    scale_ratio = max(target_width / width, target_height / height)
-    resized_width = int(width * scale_ratio)
-    resized_height = int(height * scale_ratio)
-    resized = image.resize((resized_width, resized_height))
-    canvas = Image.new("RGB", (target_width, target_height), (255, 255, 255))
-    left = (target_width - resized_width) // 2
-    top = (target_height - resized_height) // 2
-    canvas.paste(resized, (left, top))
+    if crop:
+        scale_ratio = max(target_width / width, target_height / height)
+        resized_width = int(width * scale_ratio)
+        resized_height = int(height * scale_ratio)
+        resized = image.resize((resized_width, resized_height))
+        canvas = Image.new("RGB", (target_width, target_height), (255, 255, 255))
+        left = (target_width - resized_width) // 2
+        top = (target_height - resized_height) // 2
+        canvas.paste(resized, (left, top))
+    else:
+        canvas = fit_contain(image, target_width, target_height)
     return quantize_for_preview(canvas)
 
 
@@ -430,8 +435,12 @@ def convert_for_photopainter(
     if paper_cleanup and conversion != "waveshare":
         display = clean_paper_background(display)
 
-    preview = display.copy() if conversion == "waveshare" else quantize_for_preview(display)
-    output = quantize_for_preview(display) if prequantize and conversion != "waveshare" else display
+    preview = display.copy() if conversion.startswith("waveshare") else quantize_for_preview(display)
+    output = (
+        quantize_for_preview(display)
+        if prequantize and not conversion.startswith("waveshare")
+        else display
+    )
     output.save(bmp_path, format="BMP")
     preview.save(preview_path, format="JPEG", quality=88, optimize=True)
 
@@ -482,12 +491,14 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--conversion",
-        choices=("waveshare", "adaptive", "plain"),
+        choices=("waveshare", "waveshare-crop", "adaptive", "plain"),
         default="waveshare",
         help=(
-            "Image conversion pipeline. waveshare matches the official six-color "
-            "PhotoPainter converter; adaptive preserves RGB for driver-side "
-            "quantization after dynamic range enhancement; plain only fits image."
+            "Image conversion pipeline. waveshare fits the full artwork and applies "
+            "the official six-color PhotoPainter palette/dither; waveshare-crop "
+            "matches the official scale-to-fill crop; adaptive preserves RGB for "
+            "driver-side quantization after dynamic range enhancement; plain only "
+            "fits image."
         ),
     )
     parser.add_argument(

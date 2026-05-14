@@ -36,11 +36,10 @@ diagnostics/
 vendor/waveshare-photopainter/
 ```
 
-The compiler uses a Python implementation of Waveshare's six-color PhotoPainter
-converter by default. It scales to 800x480, center-crops, and applies
-Floyd-Steinberg dithering into the panel's black/white/yellow/red/blue/green
-palette. The implementation was verified as pixel-identical to Waveshare's
-`convert.py` for the current test image.
+The compiler uses Waveshare's six-color PhotoPainter palette and
+Floyd-Steinberg dithering by default, while fitting the full artwork into the
+800x480 display without cropping. The `--conversion waveshare-crop` mode matches
+Waveshare's official scale-to-fill crop behavior exactly.
 
 The upstream converter bundle can be downloaded for comparison or audit:
 
@@ -53,6 +52,7 @@ Alternative local conversion experiments remain available:
 ```bash
 python scripts/compile_hokusai_photopainter.py --force --conversion adaptive
 python scripts/compile_hokusai_photopainter.py --force --conversion plain
+python scripts/compile_hokusai_photopainter.py --force --conversion waveshare-crop
 ```
 
 Metadata manifests are kept in `metadata/`.
