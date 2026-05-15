@@ -20,8 +20,8 @@ Raspberry Pi / PhotoPainter:
 
 - Waveshare PhotoPainter hardware with the 7.3-inch E Ink Spectra 6 display
 - Raspberry Pi OS with Python 3
-- Waveshare `waveshare_epd` Python driver installed in
-  `/home/ravi/photopainter-venv`
+- Waveshare `waveshare_epd` Python driver installed in the remote Python
+  environment configured by `PHOTOPAINTER_REMOTE_PYTHON`
 - SSH access from the local machine
 
 ## Quick Start
@@ -94,30 +94,35 @@ Reverse-engineering notes for the Waveshare converter are in
 
 ## Deploy To The Frame
 
-Set up an SSH alias for the frame:
+The mise config includes reference values for one frame:
+
+```toml
+PHOTOPAINTER_HOST = "pi-window"
+PHOTOPAINTER_REMOTE_IMAGE_DIR = "/home/ravi/Pictures/hokusai-photopainter"
+PHOTOPAINTER_REMOTE_PYTHON = "/home/ravi/photopainter-venv/bin/python"
+PHOTOPAINTER_REMOTE_SCRIPT_DIR = "/home/ravi"
+PHOTOPAINTER_ROTATE_LOG = "/home/ravi/photopainter-rotate.log"
+```
+
+Override those variables in your shell or a local untracked mise config when
+using a different hostname, user, or install location:
+
+```bash
+PHOTOPAINTER_HOST=photopainter mise run deploy
+```
+
+Set up an SSH alias for the frame if you do not want to use its raw address:
 
 ```sshconfig
-Host pi-window photopainter
-  HostName 192.168.50.169
-  User ravi
+Host photopainter
+  HostName 192.0.2.10
+  User pi
 ```
 
 Deploy scripts and display-ready BMPs:
 
 ```bash
 mise run deploy
-```
-
-The deploy task uses `pi-window` by default. Override it when needed:
-
-```bash
-HOST=photopainter mise run deploy
-```
-
-The deploy script syncs to:
-
-```bash
-~/Pictures/hokusai-photopainter
 ```
 
 It preserves `.photopainter-state.json`, so rotation state is not lost while
@@ -128,7 +133,7 @@ BMPs are pruned and refreshed.
 Display a specific image on the Pi:
 
 ```bash
-~/photopainter-venv/bin/python ~/photopainter-display-image.py /path/to/image.bmp
+$PHOTOPAINTER_REMOTE_PYTHON "$PHOTOPAINTER_REMOTE_SCRIPT_DIR/photopainter-display-image.py" /path/to/image.bmp
 ```
 
 Redisplay the image named by the current state file without advancing rotation:
@@ -140,23 +145,23 @@ mise run display-current
 Advance through the collection one image at a time:
 
 ```bash
-~/photopainter-venv/bin/python ~/photopainter-show-hokusai.py
+$PHOTOPAINTER_REMOTE_PYTHON "$PHOTOPAINTER_REMOTE_SCRIPT_DIR/photopainter-show-hokusai.py"
 ```
 
 The rotation script performs one display refresh by default. Use `--clear-first`
 only as a recovery option for visible ghosting; it performs a full clear refresh
 before the image refresh, which roughly doubles the update cycle.
 
-State is stored on the Pi at:
+State is stored at:
 
 ```bash
-~/Pictures/hokusai-photopainter/.photopainter-state.json
+$PHOTOPAINTER_REMOTE_IMAGE_DIR/.photopainter-state.json
 ```
 
 Twice-daily cron example:
 
 ```cron
-0 5,12 * * * /usr/bin/flock -n /tmp/photopainter-hokusai.lock /home/ravi/photopainter-venv/bin/python /home/ravi/photopainter-show-hokusai.py >> /home/ravi/photopainter-rotate.log 2>&1
+0 5,12 * * * /usr/bin/flock -n /tmp/photopainter-hokusai.lock /path/to/photopainter-venv/bin/python /path/to/photopainter-show-hokusai.py >> /path/to/photopainter-rotate.log 2>&1
 ```
 
 ## License
