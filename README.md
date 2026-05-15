@@ -129,3 +129,9 @@ Twice-daily cron example:
 ```cron
 0 5,12 * * * /usr/bin/flock -n /tmp/photopainter-hokusai.lock /home/ravi/photopainter-venv/bin/python /home/ravi/photopainter-show-hokusai.py >> /home/ravi/photopainter-rotate.log 2>&1
 ```
+
+## License
+
+Project code is licensed under the MIT License. Generated images are not
+included in this repository; see [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)
+for museum source and Waveshare reference-converter notes.
