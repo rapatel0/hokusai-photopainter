@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+from datetime import datetime
 import json
 from pathlib import Path
 
@@ -11,6 +12,10 @@ from waveshare_epd import epd7in3e
 
 DEFAULT_DIR = Path.home() / "Pictures" / "hokusai-photopainter"
 DEFAULT_STATE_FILE = DEFAULT_DIR / ".photopainter-state.json"
+
+
+def timestamp() -> str:
+    return datetime.now().astimezone().isoformat(timespec="seconds")
 
 
 def fit_image(path: Path, width: int, height: int, rotate: int = 0) -> Image.Image:
@@ -89,7 +94,7 @@ def main() -> None:
     image_path, index, total = choose_image(
         args.dir, args.query, args.state_file, args.reset_state
     )
-    print(f"{index + 1}/{total}: {image_path}")
+    print(f"{timestamp()} selected {index + 1}/{total}: {image_path}", flush=True)
 
     epd = epd7in3e.EPD()
     image = fit_image(image_path, epd.width, epd.height, args.rotate)
@@ -99,6 +104,11 @@ def main() -> None:
     epd.display(epd.getbuffer(image))
     epd.sleep()
     save_next_index(args.state_file, index + 1, image_path, total)
+    print(
+        f"{timestamp()} completed {index + 1}/{total}; "
+        f"next_index={(index + 1) % total}; last_image={image_path.name}",
+        flush=True,
+    )
 
 
 if __name__ == "__main__":
