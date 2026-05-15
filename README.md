@@ -7,24 +7,32 @@ Tools for building and displaying a Hokusai image collection on the Waveshare RP
 Bootstrap a local machine:
 
 ```bash
-make setup
-make converter
+mise trust
+mise install
+mise run setup
+mise run converter
+```
+
+Available project tasks:
+
+```bash
+mise tasks ls --local
 ```
 
 Build the local archive from official open-access museum APIs:
 
 ```bash
-make build
+mise run build
 ```
 
 Regenerate already-downloaded images after changing conversion settings:
 
 ```bash
-make reconvert
+mise run reconvert
 ```
 
-Use `make rebuild` when you also want to refresh the museum API metadata and
-download any newly discovered source images.
+Use `mise run rebuild` when you also want to refresh the museum API metadata
+and download any newly discovered source images.
 
 Generated folders are intentionally ignored by git:
 
@@ -47,7 +55,7 @@ The reverse-engineered converter notes are in
 The upstream converter bundle can be downloaded for comparison or audit:
 
 ```bash
-make converter
+mise run converter
 ```
 
 Alternative local conversion experiments remain available:
@@ -62,7 +70,8 @@ Metadata manifests are kept in `metadata/`.
 
 ## Raspberry Pi
 
-Set up an SSH alias for the frame, or pass `HOST=...` to `make deploy`:
+Set up an SSH alias for the frame. The mise tasks use `pi-window` by default;
+override it with `HOST=...` when needed:
 
 ```sshconfig
 Host pi-window photopainter
@@ -79,7 +88,8 @@ The Pi stores display-ready images at:
 Deploy scripts and display-ready BMPs:
 
 ```bash
-make deploy HOST=pi-window
+mise run deploy
+HOST=pi-window mise run deploy
 ```
 
 The deploy script keeps `.photopainter-state.json` on the Pi while syncing and
@@ -94,7 +104,8 @@ Display a specific image:
 Redisplay the image named by the current state file without advancing rotation:
 
 ```bash
-make display-current HOST=pi-window
+mise run display-current
+HOST=pi-window mise run display-current
 ```
 
 Advance through the Hokusai collection one image at a time:

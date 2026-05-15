@@ -1,0 +1,40 @@
+[tools]
+python = "3.13.13"
+
+[tasks.setup]
+description = "Create the local virtualenv and install Python dependencies"
+run = "python -m venv .venv && .venv/bin/python -m pip install -r requirements.txt"
+sources = ["requirements.txt"]
+outputs = [".venv/pyvenv.cfg"]
+
+[tasks.converter]
+description = "Download Waveshare's reference PhotoPainter converter for audit/comparison"
+depends = ["setup"]
+run = ".venv/bin/python scripts/download_waveshare_converter.py"
+
+[tasks.build]
+description = "Build the local Hokusai PhotoPainter archive from museum APIs"
+depends = ["setup"]
+run = ".venv/bin/python scripts/compile_hokusai_photopainter.py"
+
+[tasks.rebuild]
+description = "Refresh metadata and rebuild the full archive"
+depends = ["setup"]
+run = ".venv/bin/python scripts/compile_hokusai_photopainter.py --force"
+
+[tasks.reconvert]
+description = "Regenerate display images from the existing manifest"
+depends = ["setup"]
+run = ".venv/bin/python scripts/reconvert_from_manifest.py --conversion waveshare"
+
+[tasks.deploy]
+description = "Deploy scripts and display-ready BMPs to the PhotoPainter"
+run = "scripts/deploy_to_pi.sh ${HOST:-pi-window}"
+
+[tasks.display-current]
+description = "Redisplay the image named by the remote state file"
+run = "scripts/display_current_on_pi.sh ${HOST:-pi-window}"
+
+[tasks.test]
+description = "Compile-check all Python scripts"
+run = "python -m py_compile scripts/*.py"

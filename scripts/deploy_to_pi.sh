@@ -6,7 +6,7 @@ remote_image_dir="${PHOTOPAINTER_REMOTE_IMAGE_DIR:-/home/ravi/Pictures/hokusai-p
 remote_python="${PHOTOPAINTER_REMOTE_PYTHON:-/home/ravi/photopainter-venv/bin/python}"
 
 if [[ ! -d photopainter_800x480_bmp ]]; then
-  echo "Missing photopainter_800x480_bmp/. Run: make build" >&2
+  echo "Missing photopainter_800x480_bmp/. Run: mise run build" >&2
   exit 1
 fi
 
