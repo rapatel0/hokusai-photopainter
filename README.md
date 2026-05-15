@@ -113,8 +113,8 @@ The stateful picker stores its next index in:
 ~/Pictures/hokusai-photopainter/.photopainter-state.json
 ```
 
-Daily cron example:
+Twice-daily cron example:
 
 ```cron
-0 5 * * * /usr/bin/flock -n /tmp/photopainter-hokusai.lock /home/ravi/photopainter-venv/bin/python /home/ravi/photopainter-show-hokusai.py >> /home/ravi/photopainter-rotate.log 2>&1
+0 5,12 * * * /usr/bin/flock -n /tmp/photopainter-hokusai.lock /home/ravi/photopainter-venv/bin/python /home/ravi/photopainter-show-hokusai.py >> /home/ravi/photopainter-rotate.log 2>&1
 ```
